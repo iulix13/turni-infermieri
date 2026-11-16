@@ -3,7 +3,7 @@ import pandas as pd
 import calendar
 import io
 
-st.set_page_config(page_title="Turnistica Mensile Infermieri - Aziendale", layout="wide")
+st.set_page_config(page_title="Turnistica Mensile Infermieri", layout="wide")
 
 MESI_IT = {
     1: "GENNAIO", 2: "FEBBRAIO", 3: "MARZO", 4: "APRILE",
@@ -11,15 +11,15 @@ MESI_IT = {
     9: "SETTEMBRE", 10: "OTTOBRE", 11: "NOVEMBRE", 12: "DICEMBRE"
 }
 
-st.title("📋 Pianificatore Turni Infermieristici (Modello Aziendale & Target 156h)")
+st.title("Pianificatore Turni Infermieristici")
 
 # --- SIDEBAR: CONFIGURAZIONE MESE E REPARTO ---
 st.sidebar.header("1. Impostazioni Mese e Reparto")
-intestazione_dip = st.sidebar.text_input("Intestazione Dipartimento:", value="DIREZIONE INFERMIERISTICA E TECNICA DIPARTIMENTO CHIRURGICO")
-reparto = st.sidebar.text_input("Nome Reparto:", value="CHIRURGIA DEGENZE")
+intestazione_dip = st.sidebar.text_input("Intestazione Dipartimento:", value="")
+reparto = st.sidebar.text_input("Nome Reparto:", value="")
 anno = st.sidebar.number_input("Anno", min_value=2024, max_value=2030, value=2026)
 mese = st.sidebar.selectbox("Mese", list(range(1, 13)), index=10, format_func=lambda x: MESI_IT[x])
-data_emissione = st.sidebar.text_input("Data Emissione:", value="20/01/2026")
+data_emissione = st.sidebar.text_input("Data Emissione:", value="")
 
 giorni_nel_mese = calendar.monthrange(anno, mese)[1]
 nomi_giorni_it = ["L", "M", "M", "G", "V", "S", "D"]
@@ -38,36 +38,15 @@ modalita_personale = st.sidebar.radio(
     ["Inserisci Nomi Reali", "Carica File Excel/CSV"]
 )
 
-# Inizializzazione Session State per il Personale (Default 23 Unità con Elisa e Domenico)
+# Inizializzazione Session State per il Personale
 if 'df_pers' not in st.session_state or len(st.session_state.df_pers) != num_infermieri:
-    nomi_default = [
-        "ELISA", "DOMENICO", "MARIO", "ANNA", "GIUSEPPE", 
-        "FRANCESCA", "LUCA", "SARA", "ALESSANDRO", "MARTINA", 
-        "ROBERTO", "ELENA", "GIOVANNI", "CHIARA", "STEFANO", 
-        "FEDERICA", "ANTONIO", "VALENTINA", "PAOLO", "GIULIA", 
-        "MARCO", "SILVIA", "FEDERICO"
-    ]
-    
     dati_iniziali = []
     for idx in range(num_infermieri):
-        nome = nomi_default[idx] if idx < len(nomi_default) else f"Infermiere {idx+1}"
-        
-        # Impostazioni per Elisa, Domenico e personale speciale
-        if nome in ["ELISA", "DOMENICO"]:
-            es_notte = "Sì"
-            t_fisso = "Solo Mattina (M)"
-        elif idx == 2:
-            es_notte = "Sì"
-            t_fisso = "Nessuno"
-        else:
-            es_notte = "No"
-            t_fisso = "Nessuno"
-            
         dati_iniziali.append({
-            "Nome": nome,
+            "Nome": f"Infermiere {idx+1}",
             "Qualifica": "Infermiere",
-            "Esonero_Notte": es_notte,
-            "Turno_Fisso": t_fisso,
+            "Esonero_Notte": "No",
+            "Turno_Fisso": "Nessuno",
             "Turno_Inizio_Mese": "M"
         })
     st.session_state.df_pers = pd.DataFrame(dati_iniziali)
@@ -108,7 +87,7 @@ tab_personale, tab_richieste, tab_matrice = st.tabs([
 # --- TAB 1: GESTIONE PERSONALE ---
 with tab_personale:
     st.subheader(f"Gestione Personale in Servizio ({len(st.session_state.df_pers)} Infermieri)")
-    st.info("💡 Imposta esoneri notturni, turni fissi (es. Solo Mattina per Elisa e Domenico) e turno iniziale. Clicca su **Salva Modifiche**.")
+    st.info("💡 Imposta liberamente esoneri notturni, turni fissi e il turno iniziale del mese. Clicca su **Salva Modifiche**.")
     
     with st.form("form_personale"):
         edited_df = st.data_editor(
@@ -129,7 +108,7 @@ with tab_personale:
                 ),
                 "Turno_Inizio_Mese": st.column_config.SelectboxColumn(
                     "Turno 1° del Mese",
-                    options=["M", "P", "N", "S", "R", "F", "PR", "104", "CFD", "PC"],
+                    options=["M", "P", "N", "S", "R", "FE", "104", "ASP", "RO", "CFD", "PC", "PR"],
                     required=True
                 )
             },
@@ -158,9 +137,10 @@ with tab_richieste:
         causale_scelta = st.selectbox(
             "Tipo Evento / Desiderato:", 
             [
-                "F (Ferie)", "PR (Permesso)", "104 (Legge 104)", "FE (Festivo)",
-                "ASP (Aspettativa)", "REC (Recupero Ore)", "CFD (Centro Ferite Difficili - P)", "PC (Prericovero Centralizzato - M)",
-                "M_DES (Desiderata Mattina)", "P_DES (Desiderata Pomeriggio)", "N_DES (Desiderata Notte)", "R (Riposo forzato)"
+                "M (Mattina)", "P (Pomeriggio)", "N (Notte)", "S (Smonto)", "R (Riposo)",
+                "FE (Ferie)", "PR (Permesso)", "104 (Legge 104)", "ASP (Aspettativa)",
+                "RO (Recupero Ore)", "CFD (Centro Ferite Difficili - P)", "PC (Prericovero Centralizzato - M)",
+                "M_DES (Desiderata Mattina)", "P_DES (Desiderata Pomeriggio)", "N_DES (Desiderata Notte)"
             ]
         )
         sigla_causale = causale_scelta.split(" ")[0]
@@ -260,7 +240,7 @@ with tab_matrice:
         pesi_ore = {
             "M": 7, "P": 7, "S": 7, "CFD": 7, "PC": 7, "M_DES": 7, "P_DES": 7,
             "N": 3, "N_DES": 3,
-            "F": 6, "PR": 6, "104": 6, "FE": 6, "ASP": 6, "REC": 6,
+            "FE": 6, "PR": 6, "104": 6, "ASP": 6, "RO": 6,
             "R": 0
         }
 
@@ -374,23 +354,10 @@ with tab_matrice:
 
         st.dataframe(df_matrice.style.apply(applica_stile, axis=None), use_container_width=True, height=480)
 
-        # --- EXPORT CSV ---
-        csv_data = df_matrice.to_csv().encode('utf-8')
-        st.download_button(
-            label="📥 Scarica Tabella Turni (.csv per Excel)",
-            data=csv_data,
-            file_name=f"Turnistica_Infermieri_{MESI_IT[mese]}_{anno}.csv",
-            mime="text/csv",
-            type="primary"
-        )
-
-        # --- CONTEGGIO CON RIGHE CONTA M, CONTA P, CONTA N (STILE MATRICE UFFICIALE) ---
-        st.markdown("---")
-        st.markdown("##### 📈 Riepilogo Giornaliero Presenze (Righe CONTA M / CONTA P / CONTA N)")
-        
-        tot_m_row = {"Turno / Controllo": f"CONTA M (Fabbisogno: {req_m})"}
-        tot_p_row = {"Turno / Controllo": f"CONTA P (Fabbisogno: {req_p})"}
-        tot_n_row = {"Turno / Controllo": f"CONTA N (Fabbisogno: {req_n})"}
+        # --- PREPARAZIONE DATI PER EXPORT COMPLETO (CSV) CON GIORNI E SETTIMANA ---
+        tot_m_row = {"INFERMIERE": f"CONTA M (Fabbisogno: {req_m})"}
+        tot_p_row = {"INFERMIERE": f"CONTA P (Fabbisogno: {req_p})"}
+        tot_n_row = {"INFERMIERE": f"CONTA N (Fabbisogno: {req_n})"}
         
         for g in range(1, giorni_nel_mese + 1):
             col_g = [riga[str(g)] for riga in dati_matrice]
@@ -402,5 +369,51 @@ with tab_matrice:
         tot_p_row["TOT ore"] = ""
         tot_n_row["TOT ore"] = ""
 
-        df_riepilogo = pd.DataFrame([tot_m_row, tot_p_row, tot_n_row]).set_index("Turno / Controllo")
+        df_export = df_matrice.reset_index()
+        df_conta = pd.DataFrame([tot_m_row, tot_p_row, tot_n_row])
+        
+        # Righe di intestazione descrittive per il file CSV
+        righe_header_csv = [
+            f"DIPARTIMENTO:,{intestazione_dip}",
+            f"REPARTO:,{reparto}",
+            f"MESE:,{MESI_IT[mese]} {anno}",
+            f"DATA EMISSIONE:,{data_emissione}",
+            f"ORE DOVUTE:,156",
+            "" # Riga vuota di separazione
+        ]
+        
+        buffer_csv = io.StringIO()
+        for h_line in righe_header_csv:
+            buffer_csv.write(h_line + "\n")
+            
+        # 1. Riga con i NUMERI dei giorni del mese (1, 2, 3...)
+        riga_num_giorni = ["GIORNO"] + [str(g) for g in range(1, giorni_nel_mese + 1)] + [""]
+        buffer_csv.write(",".join(riga_num_giorni) + "\n")
+
+        # 2. Riga con le LETTERE della settimana (L, M, M, G...)
+        riga_settimana = ["SETTIMANA"] + [giorni_settimana[g-1] for g in range(1, giorni_nel_mese + 1)] + ["TOT ore"]
+        buffer_csv.write(",".join(riga_settimana) + "\n")
+        
+        # 3. Scriviamo i turni del personale
+        df_export.to_csv(buffer_csv, index=False, header=False)
+        buffer_csv.write("\n")
+        
+        # 4. Scriviamo la tabellina della conta in fondo
+        df_conta.to_csv(buffer_csv, index=False, header=False)
+        
+        output_csv_str = buffer_csv.getvalue().encode('utf-8')
+
+        st.download_button(
+            label="📥 Scarica Report Turni Completo (.csv)",
+            data=output_csv_str,
+            file_name=f"Report_Turni_{reparto.replace(' ', '_')}_{MESI_IT[mese]}_{anno}.csv",
+            mime="text/csv",
+            type="primary"
+        )
+
+        # --- CONTEGGIO CON RIGHE CONTA M, CONTA P, CONTA N (STILE MATRICE UFFICIALE) ---
+        st.markdown("---")
+        st.markdown("##### 📈 Riepilogo Giornaliero Presenze (Righe CONTA M / CONTA P / CONTA N)")
+        
+        df_riepilogo = pd.DataFrame([tot_m_row, tot_p_row, tot_n_row]).set_index("INFERMIERE")
         st.dataframe(df_riepilogo, use_container_width=True)
