@@ -2,6 +2,9 @@ import streamlit as st
 import pandas as pd
 import calendar
 import io
+from openpyxl import Workbook
+from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
 
 st.set_page_config(page_title="Turnistica Mensile Infermieri", layout="wide")
 
@@ -108,7 +111,7 @@ with tab_personale:
                 ),
                 "Turno_Inizio_Mese": st.column_config.SelectboxColumn(
                     "Turno 1° del Mese",
-                    options=["M", "P", "N", "S", "R", "FE", "104", "ASP", "RO", "CFD", "PC", "PR"],
+                    options=["M", "P", "N", "S", "R", "FE", "104", "ASP", "MAL", "RO", "CFD", "PC", "PR"],
                     required=True
                 )
             },
@@ -138,7 +141,7 @@ with tab_richieste:
             "Tipo Evento / Desiderato:", 
             [
                 "M (Mattina)", "P (Pomeriggio)", "N (Notte)", "S (Smonto)", "R (Riposo)",
-                "FE (Ferie)", "PR (Permesso)", "104 (Legge 104)", "ASP (Aspettativa)",
+                "FE (Ferie)", "PR (Permesso)", "104 (Legge 104)", "ASP (Aspettativa)", "MAL (Malattia)",
                 "RO (Recupero Ore)", "CFD (Centro Ferite Difficili - P)", "PC (Prericovero Centralizzato - M)",
                 "M_DES (Desiderata Mattina)", "P_DES (Desiderata Pomeriggio)", "N_DES (Desiderata Notte)"
             ]
@@ -183,6 +186,206 @@ with tab_richieste:
     else:
         st.info("Nessuna richiesta o desiderata presente al momento.")
 
+# --- FUNZIONE GENERAZIONE FILE EXCEL COLORATO ---
+def genera_excel_colorato(dati_matrice, matrice_turni_raw, giorni_settimana, colonne_domeniche, tot_m_row, tot_p_row, tot_n_row):
+    wb = Workbook()
+    ws = wb.active
+    ws.title = f"Turni_{MESI_IT[mese]}"
+
+    thin_side = Side(border_style="thin", color="000000")
+    med_side = Side(border_style="medium", color="000000")
+    border_cell = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
+    border_box = Border(left=med_side, right=med_side, top=med_side, bottom=med_side)
+
+    font_header = Font(bold=True, size=11)
+    font_bold = Font(bold=True, size=10)
+    font_normal = Font(size=10)
+
+    align_center = Alignment(horizontal="center", vertical="center")
+    align_left = Alignment(horizontal="left", vertical="center")
+
+    fill_header_grey = PatternFill(start_color="F0F0F0", end_color="F0F0F0", fill_type="solid")
+    fill_domenica = PatternFill(start_color="FFFF99", end_color="FFFF99", fill_type="solid")
+    
+    fill_fe = PatternFill(start_color="D4EDDA", end_color="D4EDDA", fill_type="solid")
+    font_fe = Font(bold=True, color="155724", size=10)
+
+    fill_asp_pr = PatternFill(start_color="CCE5FF", end_color="CCE5FF", fill_type="solid")
+    font_asp_pr = Font(bold=True, color="004085", size=10)
+
+    fill_mal_ro = PatternFill(start_color="FFF3CD", end_color="FFF3CD", fill_type="solid")
+    font_mal_ro = Font(bold=True, color="856404", size=10)
+
+    fill_des = PatternFill(start_color="E2D9F3", end_color="E2D9F3", fill_type="solid")
+    font_des = Font(bold=True, color="3B1B5B", size=10)
+
+    tot_colonne = giorni_nel_mese + 2
+
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=14)
+    ws.cell(1, 1, intestazione_dip.upper()).font = font_header
+
+    ws.merge_cells(start_row=1, start_column=15, end_row=1, end_column=24)
+    ws.cell(1, 15, f"DATA EMISSIONE: {data_emissione}").font = font_header
+
+    ws.merge_cells(start_row=1, start_column=25, end_row=1, end_column=tot_colonne)
+    ws.cell(1, 25, "ORE DOVUTE: 156").font = font_header
+
+    ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=14)
+    ws.cell(2, 1, reparto.upper()).font = font_header
+
+    ws.merge_cells(start_row=2, start_column=15, end_row=2, end_column=tot_colonne)
+    ws.cell(2, 15, f"MESE DI {MESI_IT[mese]} {anno}").font = font_header
+
+    for r in [1, 2]:
+        for c in range(1, tot_colonne + 1):
+            cell = ws.cell(r, c)
+            cell.fill = fill_header_grey
+            cell.border = border_box
+            cell.alignment = align_center
+
+    ws.cell(4, 1, "GIORNO").font = font_bold
+    ws.cell(4, 1).alignment = align_center
+    ws.cell(4, 1).border = border_cell
+
+    ws.cell(5, 1, "SETTIMANA").font = font_bold
+    ws.cell(5, 1).alignment = align_center
+    ws.cell(5, 1).border = border_cell
+
+    for g in range(1, giorni_nel_mese + 1):
+        col_idx = g + 1
+        c_num = ws.cell(4, col_idx, g)
+        c_let = ws.cell(5, col_idx, giorni_settimana[g - 1])
+        
+        c_num.font = font_bold
+        c_let.font = font_bold
+        c_num.alignment = align_center
+        c_let.alignment = align_center
+        c_num.border = border_cell
+        c_let.border = border_cell
+
+        if str(g) in colonne_domeniche:
+            c_num.fill = fill_domenica
+            c_let.fill = fill_domenica
+
+    ws.cell(4, tot_colonne, "").border = border_cell
+    c_tot_h = ws.cell(5, tot_colonne, "TOT ore")
+    c_tot_h.font = font_bold
+    c_tot_h.alignment = align_center
+    c_tot_h.border = border_cell
+
+    curr_row = 6
+    for riga_dati in dati_matrice:
+        nome = riga_dati["INFERMIERE"]
+        c_nome = ws.cell(curr_row, 1, nome)
+        c_nome.font = font_bold
+        c_nome.alignment = align_left
+        c_nome.border = border_cell
+
+        for g in range(1, giorni_nel_mese + 1):
+            col_idx = g + 1
+            val_disp = riga_dati[str(g)]
+            val_raw = matrice_turni_raw[nome].get(str(g), "R")
+
+            cell = ws.cell(curr_row, col_idx, val_disp)
+            cell.alignment = align_center
+            cell.border = border_cell
+            cell.font = font_normal
+
+            if str(g) in colonne_domeniche:
+                cell.fill = fill_domenica
+
+            if val_disp == "FE":
+                cell.fill = fill_fe
+                cell.font = font_fe
+            elif val_disp in ["ASP", "PR"]:
+                cell.fill = fill_asp_pr
+                cell.font = font_asp_pr
+            elif val_disp in ["MAL", "RO"]:
+                cell.fill = fill_mal_ro
+                cell.font = font_mal_ro
+            elif "DES" in val_raw:
+                cell.fill = fill_des
+                cell.font = font_des
+
+        c_tot = ws.cell(curr_row, tot_colonne, riga_dati["TOT ore"])
+        c_tot.font = font_bold
+        c_tot.alignment = align_center
+        c_tot.border = border_cell
+
+        curr_row += 1
+
+    curr_row += 1
+    for r_conta in [tot_m_row, tot_p_row, tot_n_row]:
+        c_label = ws.cell(curr_row, 1, r_conta["INFERMIERE"])
+        c_label.font = font_bold
+        c_label.alignment = align_left
+        c_label.fill = fill_header_grey
+        c_label.border = border_cell
+
+        for g in range(1, giorni_nel_mese + 1):
+            col_idx = g + 1
+            c_val = ws.cell(curr_row, col_idx, r_conta[str(g)])
+            c_val.font = font_bold
+            c_val.alignment = align_center
+            c_val.border = border_cell
+            if str(g) in colonne_domeniche:
+                c_val.fill = fill_domenica
+
+        ws.cell(curr_row, tot_colonne, "").border = border_cell
+        curr_row += 1
+
+    ws.column_dimensions["A"].width = 28
+    for g in range(1, giorni_nel_mese + 1):
+        ws.column_dimensions[get_column_letter(g + 1)].width = 5.5
+    ws.column_dimensions[get_column_letter(tot_colonne)].width = 10
+
+    output = io.BytesIO()
+    wb.save(output)
+    return output.getvalue()
+
+
+# --- FUNZIONI AUSILIARIE PER VINCOLI CCNL SANITÀ ---
+def conta_giorni_consecutivi_senza_riposo(matrice_inf, giorno_attuale):
+    """Conta quanti giorni consecutivi l'operatore ha lavorato (incluso lo smonto) prima del giorno attuale."""
+    consecutivi = 0
+    for d in range(giorno_attuale - 1, 0, -1):
+        t = matrice_inf.get(str(d), "R")
+        # R, FE, PR, 104, ASP, MAL, RO interrompono la sequenza di servizio attivo continuo
+        if t in ["R", "FE", "PR", "104", "ASP", "MAL", "RO"]:
+            break
+        consecutivi += 1
+    return consecutivi
+
+def passaggio_valido_ccnl(prev_turno, nuovo_turno, giorni_consecutivi, ha_esonero_notte, turno_fisso):
+    """Verifica il rispetto delle 11h di riposo, smonto post-notte e tetto max 6 giorni consecutivi."""
+    # 1. Tetto massimo 6 giorni consecutivi di servizio (al 7° giorno scatta il riposo obbligatorio CCNL)
+    if nuovo_turno not in ["R", "FE", "PR", "104", "ASP", "MAL", "RO"] and giorni_consecutivi >= 6:
+        return False
+
+    # 2. Esonero Notte
+    if ha_esonero_notte and nuovo_turno in ["N", "N_DES"]:
+        return False
+
+    # 3. Turno Fisso
+    if "Mattina" in turno_fisso and nuovo_turno not in ["M", "PC", "R", "FE", "PR", "104", "ASP", "MAL", "RO"]:
+        return False
+    if "Pomeriggio" in turno_fisso and nuovo_turno not in ["P", "CFD", "R", "FE", "PR", "104", "ASP", "MAL", "RO"]:
+        return False
+
+    # 4. Regola Smonto: 'S' esiste SOLO se ieri era Notte ('N')
+    if prev_turno in ["N", "N_DES"] and nuovo_turno != "S":
+        return False
+    if nuovo_turno == "S" and prev_turno not in ["N", "N_DES"]:
+        return False
+
+    # 5. Riposo minimo giornaliero di 11 ore (CCNL Sanità):
+    # Vietato fare Mattina (07:00) dopo Pomeriggio (finisce alle 21:00 -> solo 10h di stacco) o dopo Notte
+    if prev_turno in ["P", "CFD", "P_DES"] and nuovo_turno in ["M", "PC", "M_DES"]:
+        return False
+    # Dopo lo Smonto ('S', che termina alle 07:00 del mattino), è ammesso riprendere con 'M' o 'P' (24h/31h di stacco) oppure 'R'
+    return True
+
+
 # --- TAB 3: GENERATORE MATRICE AZIENDALE VALIDATA ---
 with tab_matrice:
     st.markdown("""
@@ -193,7 +396,6 @@ with tab_matrice:
         </style>
     """, unsafe_allow_html=True)
 
-    # Intestazione formale in stile Matrice Ufficiale
     c1, c2, c3 = st.columns([3, 2, 2.5])
     with c1: st.markdown(f"<div class='header-box'>{intestazione_dip}</div>", unsafe_allow_html=True)
     with c2: st.markdown(f"<div class='header-box'>DATA EMISSIONE: {data_emissione}</div>", unsafe_allow_html=True)
@@ -240,57 +442,147 @@ with tab_matrice:
         pesi_ore = {
             "M": 7, "P": 7, "S": 7, "CFD": 7, "PC": 7, "M_DES": 7, "P_DES": 7,
             "N": 3, "N_DES": 3,
-            "FE": 6, "PR": 6, "104": 6, "ASP": 6, "RO": 6,
+            "FE": 6, "PR": 6, "104": 6, "ASP": 6, "MAL": 6, "RO": 6,
             "R": 0
         }
 
-        # Matrice sfalsata dinamica (Ciclo M -> P -> N -> S -> R)
-        rotazione = ["M", "P", "N", "S", "R"]
+        # --- PASSAGGIO 1: ROTAZIONE CCNL CON RIENTRO POST-SMONTO E RIPOSO OGNI MAX 6 GG ---
+        # Ciclo base ampliato che permette la sequenza M -> P -> N -> S -> M -> P -> R (6 gg lavorati + 1 riposo)
+        ciclo_ccnl = ["M", "P", "N", "S", "M", "P", "R"]
         
         for idx, nome in enumerate(nomi_inf_list):
-            offset = (idx * 2) % len(rotazione)
+            offset = (idx * 2) % len(ciclo_ccnl)
+            es_notte = esoneri_dict.get(nome, False)
+            tf = turni_fissi_dict.get(nome, "Nessuno")
             
             for g in range(1, giorni_nel_mese + 1):
                 str_g = str(g)
-                tf = turni_fissi_dict.get(nome, "Nessuno")
+                consecutivi = conta_giorni_consecutivi_senza_riposo(matrice_turni[nome], g)
                 
-                # 1. Assegnazione Vincoli/Eccezioni
                 if (nome, g) in st.session_state.eccezioni:
                     matrice_turni[nome][str_g] = st.session_state.eccezioni[(nome, g)]
                 elif g == 1:
                     t_in = turni_inizio_dict.get(nome, "M")
-                    if esoneri_dict.get(nome, False) and t_in == "N":
+                    if es_notte and t_in in ["N", "N_DES"]:
                         t_in = "R"
                     matrice_turni[nome][str_g] = t_in
                 else:
                     prev = matrice_turni[nome].get(str(g - 1), "")
+                    
                     if prev in ["N", "N_DES"]:
-                        matrice_turni[nome][str_g] = "S"  # N -> S tassativo
-                    elif prev == "S":
-                        matrice_turni[nome][str_g] = "R"  # S -> R tassativo
+                        matrice_turni[nome][str_g] = "S"  # Dopo la notte c'è SEMPRE lo smonto
+                    elif consecutivi >= 6:
+                        matrice_turni[nome][str_g] = "R"  # Al 7° giorno scatta il riposo obbligatorio CCNL
                     elif "Mattina" in tf:
-                        giorni_lav = sum(1 for d in range(max(1, g-6), g) if matrice_turni[nome].get(str(d)) in ["M", "PC"])
-                        matrice_turni[nome][str_g] = "R" if giorni_lav >= 5 else "M"
+                        matrice_turni[nome][str_g] = "R" if consecutivi >= 5 else "M"
                     elif "Pomeriggio" in tf:
-                        giorni_lav = sum(1 for d in range(max(1, g-6), g) if matrice_turni[nome].get(str(d)) in ["P", "CFD"])
-                        matrice_turni[nome][str_g] = "R" if giorni_lav >= 5 else "P"
+                        matrice_turni[nome][str_g] = "R" if consecutivi >= 5 else "P"
                     else:
-                        # Segue la rotazione ciclica sfalsata M-P-N-S-R
-                        t_teorico = rotazione[(g - 1 + offset) % len(rotazione)]
-                        if t_teorico == "N" and esoneri_dict.get(nome, False):
+                        t_teorico = ciclo_ccnl[(g - 1 + offset) % len(ciclo_ccnl)]
+                        # Se il ciclo propone 'S' ma ieri non era notte, diventa 'R'
+                        if t_teorico == "S":
                             t_teorico = "R"
-                        if t_teorico == "M" and prev in ["P", "P_DES"]:  # Blocco 11h
-                            t_teorico = "P"
+                        if not passaggio_valido_ccnl(prev, t_teorico, consecutivi, es_notte, tf):
+                            # Ripiego sicuro conforme al CCNL
+                            if passaggio_valido_ccnl(prev, "P", consecutivi, es_notte, tf):
+                                t_teorico = "P"
+                            elif passaggio_valido_ccnl(prev, "M", consecutivi, es_notte, tf):
+                                t_teorico = "M"
+                            else:
+                                t_teorico = "R"
                         matrice_turni[nome][str_g] = t_teorico
 
-        # Step 2: Bilanciamento Intelligente per Raggiungere le 156h Senza Intaccare il Fabbisogno
-        for _ in range(25):
+        # --- PASSAGGIO 2: COPERTURA RIGOROSA DEL FABBISOGNO GIORNALIERO (SALTANDO RIPOSI SE NECESSARIO) ---
+        for g in range(1, giorni_nel_mese + 1):
+            str_g = str(g)
+            
+            # 1. Bilanciamento Notti (N)
+            attuali_n = sum(1 for n in nomi_inf_list if matrice_turni[n].get(str_g) in ["N", "N_DES"])
+            if attuali_n < req_n:
+                # Ordiniamo i candidati dando priorità a chi ha meno ore accumulate finora
+                candidati = [
+                    n for n in nomi_inf_list
+                    if (n, g) not in st.session_state.eccezioni
+                    and (g == giorni_nel_mese or (n, g + 1) not in st.session_state.eccezioni)
+                    and matrice_turni[n].get(str_g) in ["R", "M", "P"]
+                    and passaggio_valido_ccnl(
+                        matrice_turni[n].get(str(g-1), "") if g > 1 else "",
+                        "N",
+                        conta_giorni_consecutivi_senza_riposo(matrice_turni[n], g),
+                        esoneri_dict.get(n, False),
+                        turni_fissi_dict.get(n, "Nessuno")
+                    )
+                ]
+                candidati.sort(key=lambda x: sum(pesi_ore.get(matrice_turni[x].get(str(d), "R"), 0) for d in range(1, g)))
+                for n in candidati[:(req_n - attuali_n)]:
+                    matrice_turni[n][str_g] = "N"
+                    if g < giorni_nel_mese:
+                        matrice_turni[n][str(g + 1)] = "S"
+            elif attuali_n > req_n:
+                candidati = [n for n in nomi_inf_list if matrice_turni[n].get(str_g) == "N" and (n, g) not in st.session_state.eccezioni]
+                for n in candidati[:(attuali_n - req_n)]:
+                    matrice_turni[n][str_g] = "R"
+                    if g < giorni_nel_mese and matrice_turni[n].get(str(g + 1)) == "S":
+                        matrice_turni[n][str(g + 1)] = "R"
+
+            # 2. Bilanciamento Mattine (M) - Può convertire 'R' in 'M' anche il giorno dopo uno smonto ('S')
+            attuali_m = sum(1 for n in nomi_inf_list if matrice_turni[n].get(str_g) in ["M", "PC", "M_DES"])
+            if attuali_m < req_m:
+                candidati = [
+                    n for n in nomi_inf_list
+                    if (n, g) not in st.session_state.eccezioni
+                    and matrice_turni[n].get(str_g) in ["R", "P"]
+                    and (g == giorni_nel_mese or matrice_turni[n].get(str(g + 1)) != "S")
+                    and passaggio_valido_ccnl(
+                        matrice_turni[n].get(str(g-1), "") if g > 1 else "",
+                        "M",
+                        conta_giorni_consecutivi_senza_riposo(matrice_turni[n], g),
+                        esoneri_dict.get(n, False),
+                        turni_fissi_dict.get(n, "Nessuno")
+                    )
+                ]
+                candidati.sort(key=lambda x: sum(pesi_ore.get(matrice_turni[x].get(str(d), "R"), 0) for d in range(1, g)))
+                for n in candidati[:(req_m - attuali_m)]:
+                    matrice_turni[n][str_g] = "M"
+            elif attuali_m > req_m:
+                candidati = [n for n in nomi_inf_list if matrice_turni[n].get(str_g) == "M" and (n, g) not in st.session_state.eccezioni]
+                candidati.sort(key=lambda x: sum(pesi_ore.get(matrice_turni[x].get(str(d), "R"), 0) for d in range(1, g)), reverse=True)
+                for n in candidati[:(attuali_m - req_m)]:
+                    matrice_turni[n][str_g] = "R"
+
+            # 3. Bilanciamento Pomeriggi (P) - Può convertire 'R' in 'P' anche il giorno dopo uno smonto ('S')
+            attuali_p = sum(1 for n in nomi_inf_list if matrice_turni[n].get(str_g) in ["P", "CFD", "P_DES"])
+            if attuali_p < req_p:
+                candidati = [
+                    n for n in nomi_inf_list
+                    if (n, g) not in st.session_state.eccezioni
+                    and matrice_turni[n].get(str_g) == "R"
+                    and (g == giorni_nel_mese or matrice_turni[n].get(str(g + 1)) != "S")
+                    and passaggio_valido_ccnl(
+                        matrice_turni[n].get(str(g-1), "") if g > 1 else "",
+                        "P",
+                        conta_giorni_consecutivi_senza_riposo(matrice_turni[n], g),
+                        esoneri_dict.get(n, False),
+                        turni_fissi_dict.get(n, "Nessuno")
+                    )
+                ]
+                candidati.sort(key=lambda x: sum(pesi_ore.get(matrice_turni[x].get(str(d), "R"), 0) for d in range(1, g)))
+                for n in candidati[:(req_p - attuali_p)]:
+                    matrice_turni[n][str_g] = "P"
+            elif attuali_p > req_p:
+                candidati = [n for n in nomi_inf_list if matrice_turni[n].get(str_g) == "P" and (n, g) not in st.session_state.eccezioni]
+                candidati.sort(key=lambda x: sum(pesi_ore.get(matrice_turni[x].get(str(d), "R"), 0) for d in range(1, g)), reverse=True)
+                for n in candidati[:(attuali_p - req_p)]:
+                    matrice_turni[n][str_g] = "R"
+
+        # --- PASSAGGIO 3: EQUILIBRATURA ORE VERSO LE 156H SENZA ALTERARE IL FABBISOGNO ---
+        for _ in range(30):
             ore_per_inf = {
                 n: sum(pesi_ore.get(matrice_turni[n].get(str(g), "R"), 0) for g in range(1, giorni_nel_mese + 1))
                 for n in nomi_inf_list
             }
-            sotto = [n for n, h in ore_per_inf.items() if h < 152]
-            sopra = [n for n, h in ore_per_inf.items() if h > 162]
+            sotto = sorted([n for n, h in ore_per_inf.items() if h < 154], key=lambda x: ore_per_inf[x])
+            sopra = sorted([n for n, h in ore_per_inf.items() if h > 160], key=lambda x: ore_per_inf[x], reverse=True)
             
             if not sotto or not sopra:
                 break
@@ -303,31 +595,34 @@ with tab_matrice:
                         t_u = matrice_turni[n_under].get(str_g)
                         t_o = matrice_turni[n_over].get(str_g)
                         
-                        if t_u == 'R' and t_o in ['M', 'P', 'CFD', 'PC']:
-                            ok = True
-                            if t_o in ['M', 'PC'] and g > 1:
-                                prev_u = matrice_turni[n_under].get(str(g-1), '')
-                                if prev_u in ['P', 'N', 'S']:
-                                    ok = False
-                            tf_u = turni_fissi_dict.get(n_under, 'Nessuno')
-                            if 'Mattina' in tf_u and t_o not in ['M', 'PC']:
-                                ok = False
-                            if 'Pomeriggio' in tf_u and t_o not in ['P', 'CFD']:
-                                ok = False
+                        # Scambio 1-a-1 tra chi è in Riposo ('R') e chi ha un turno diurno ('M' o 'P'):
+                        # Così il numero totale di infermieri in servizio nel giorno resta IDENTICO!
+                        if t_u == 'R' and t_o in ['M', 'P']:
                             if (n_under, g) in st.session_state.eccezioni or (n_over, g) in st.session_state.eccezioni:
-                                ok = False
+                                continue
+                            
+                            prev_u = matrice_turni[n_under].get(str(g - 1), "") if g > 1 else ""
+                            next_u = matrice_turni[n_under].get(str(g + 1), "") if g < giorni_nel_mese else ""
+                            consec_u = conta_giorni_consecutivi_senza_riposo(matrice_turni[n_under], g)
+                            
+                            # Verifica vincoli CCNL su n_under sia verso ieri che verso domani
+                            valido_ieri = passaggio_valido_ccnl(
+                                prev_u, t_o, consec_u, esoneri_dict.get(n_under, False), turni_fissi_dict.get(n_under, "Nessuno")
+                            )
+                            valido_domani = True
+                            if next_u != "":
+                                valido_domani = passaggio_valido_ccnl(
+                                    t_o, next_u, consec_u + 1, esoneri_dict.get(n_under, False), turni_fissi_dict.get(n_under, "Nessuno")
+                                )
                                 
-                            if ok:
+                            if valido_ieri and valido_domani:
                                 matrice_turni[n_under][str_g] = t_o
                                 matrice_turni[n_over][str_g] = 'R'
                                 scambio_fatto = True
                                 break
-                    if scambio_fatto:
-                        break
-                if scambio_fatto:
-                    break
-            if not scambio_fatto:
-                break
+                    if scambio_fatto: break
+                if scambio_fatto: break
+            if not scambio_fatto: break
 
         # Costruzione DataFrame finale
         dati_matrice = []
@@ -345,16 +640,30 @@ with tab_matrice:
 
         df_matrice = pd.DataFrame(dati_matrice).set_index("INFERMIERE")
 
-        def applica_stile(val):
-            colori = pd.DataFrame('', index=df_matrice.index, columns=df_matrice.columns)
+        def colora_griglia(df):
+            stili = pd.DataFrame('', index=df.index, columns=df.columns)
+            
             for col_dom in colonne_domeniche:
-                if col_dom in colori.columns:
-                    colori[col_dom] = 'background-color: #FFFF99; font-weight: bold;'
-            return colori
+                if col_dom in stili.columns:
+                    stili[col_dom] = 'background-color: #FFFF99;'
+                    
+            for r in df.index:
+                for c in df.columns:
+                    val_disp = str(df.loc[r, c])
+                    val_raw = matrice_turni[r].get(c, "") if c != "TOT ore" else ""
+                    if val_disp == 'FE':
+                        stili.loc[r, c] = 'background-color: #D4EDDA; color: #155724; font-weight: bold;'
+                    elif val_disp in ['ASP', 'PR']:
+                        stili.loc[r, c] = 'background-color: #CCE5FF; color: #004085; font-weight: bold;'
+                    elif val_disp in ['MAL', 'RO']:
+                        stili.loc[r, c] = 'background-color: #FFF3CD; color: #856404; font-weight: bold;'
+                    elif 'DES' in val_raw:
+                        stili.loc[r, c] = 'background-color: #E2D9F3; color: #3B1B5B; font-weight: bold;'
+            return stili
 
-        st.dataframe(df_matrice.style.apply(applica_stile, axis=None), use_container_width=True, height=480)
+        st.dataframe(df_matrice.style.apply(colora_griglia, axis=None), use_container_width=True, height=480)
 
-        # --- PREPARAZIONE DATI PER EXPORT COMPLETO (CSV) CON GIORNI E SETTIMANA ---
+        # --- CALCOLO RIGHE CONTA M, P, N (ALLINEATE AL FABBISOGNO) ---
         tot_m_row = {"INFERMIERE": f"CONTA M (Fabbisogno: {req_m})"}
         tot_p_row = {"INFERMIERE": f"CONTA P (Fabbisogno: {req_p})"}
         tot_n_row = {"INFERMIERE": f"CONTA N (Fabbisogno: {req_n})"}
@@ -369,49 +678,21 @@ with tab_matrice:
         tot_p_row["TOT ore"] = ""
         tot_n_row["TOT ore"] = ""
 
-        df_export = df_matrice.reset_index()
-        df_conta = pd.DataFrame([tot_m_row, tot_p_row, tot_n_row])
-        
-        # Righe di intestazione descrittive per il file CSV
-        righe_header_csv = [
-            f"DIPARTIMENTO:,{intestazione_dip}",
-            f"REPARTO:,{reparto}",
-            f"MESE:,{MESI_IT[mese]} {anno}",
-            f"DATA EMISSIONE:,{data_emissione}",
-            f"ORE DOVUTE:,156",
-            "" # Riga vuota di separazione
-        ]
-        
-        buffer_csv = io.StringIO()
-        for h_line in righe_header_csv:
-            buffer_csv.write(h_line + "\n")
-            
-        # 1. Riga con i NUMERI dei giorni del mese (1, 2, 3...)
-        riga_num_giorni = ["GIORNO"] + [str(g) for g in range(1, giorni_nel_mese + 1)] + [""]
-        buffer_csv.write(",".join(riga_num_giorni) + "\n")
-
-        # 2. Riga con le LETTERE della settimana (L, M, M, G...)
-        riga_settimana = ["SETTIMANA"] + [giorni_settimana[g-1] for g in range(1, giorni_nel_mese + 1)] + ["TOT ore"]
-        buffer_csv.write(",".join(riga_settimana) + "\n")
-        
-        # 3. Scriviamo i turni del personale
-        df_export.to_csv(buffer_csv, index=False, header=False)
-        buffer_csv.write("\n")
-        
-        # 4. Scriviamo la tabellina della conta in fondo
-        df_conta.to_csv(buffer_csv, index=False, header=False)
-        
-        output_csv_str = buffer_csv.getvalue().encode('utf-8')
+        # --- EXPORT EXCEL (.XLSX) ---
+        excel_bytes = genera_excel_colorato(
+            dati_matrice, matrice_turni, giorni_settimana, colonne_domeniche, tot_m_row, tot_p_row, tot_n_row
+        )
+        nome_rep_file = reparto.replace(' ', '_') if reparto.strip() else "Reparto"
 
         st.download_button(
-            label="📥 Scarica Report Turni Completo (.csv)",
-            data=output_csv_str,
-            file_name=f"Report_Turni_{reparto.replace(' ', '_')}_{MESI_IT[mese]}_{anno}.csv",
-            mime="text/csv",
+            label="📥 Scarica Report Turni a Colori (.xlsx per Excel)",
+            data=excel_bytes,
+            file_name=f"Report_Turni_{nome_rep_file}_{MESI_IT[mese]}_{anno}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             type="primary"
         )
 
-        # --- CONTEGGIO CON RIGHE CONTA M, CONTA P, CONTA N (STILE MATRICE UFFICIALE) ---
+        # --- CONTEGGIO A SCHERMO ---
         st.markdown("---")
         st.markdown("##### 📈 Riepilogo Giornaliero Presenze (Righe CONTA M / CONTA P / CONTA N)")
         
